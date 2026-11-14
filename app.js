@@ -1,5 +1,5 @@
 // Tournoi de handball — application web. Affichage public sans identifiant, saisie après connexion.
-const VERSION = "2.1";
+const VERSION = "2.2";
 const SUPABASE_URL = "https://izzwdgtwzmtlhiqkgewv.supabase.co";
 const SUPABASE_CLE = "sb_publishable_Y7E0XgCzbJK9wSB2guIt3g_x8AdV8aN"; // clé publique : les droits sont contrôlés par la base
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_CLE);
@@ -19,6 +19,10 @@ function poser(o, chemin, v) {
   for (const k of cles) o = o[k] ??= {};
   o[fin] = v;
 }
+// un identifiant sans « @ » devient une adresse interne : aucun e-mail n'est jamais envoyé
+const DOMAINE = "@tpra.local";
+const versEmail = (identifiant) => { const i = identifiant.trim().toLowerCase(); return i.includes("@") ? i : i + DOMAINE; };
+const identifiant = (email) => String(email || "").replace(DOMAINE, "");
 function dire(texte, erreur) {
   etat.message = erreur ? `${texte} (${erreur.message || erreur})` : texte;
   afficher();
@@ -56,7 +60,7 @@ function calculer() {
 }
 async function lireRole() {
   etat.role = etat.session ? (await sb.rpc("th_role")).data || null : null;
-  if (etat.session && !etat.role) etat.message = "Ton compte n'a pas encore d'accès : demande à l'organisateur d'ajouter ton e-mail dans Réglages > Accès.";
+  if (etat.session && !etat.role) etat.message = "Ton compte n'a pas encore d'accès : demande à l'organisateur de le créer dans Réglages > Comptes.";
   if (!organisateur() && etat.onglet === "reglages") etat.onglet = "matchs";
   await charger();
 }
@@ -79,7 +83,7 @@ function carteMatch(m) {
   const classe = (e, autre) => "eq" + (m.joue && m.vainqueur === e && e ? " gagne" : m.joue && m.vainqueur === autre && autre ? " perd" : "");
   const arbitres = [TH.designation(m.arbitre), TH.designation(m.renfort)].filter(Boolean).join(" + ");
   const detail = [etat.groupe !== "heure" && m.phase === "poule" ? m.heure : "", m.phase === "poule" ? "Poule " + m.poule : m.intitule,
-    m.forfait ? "Forfait de " + (m.forfait === 1 ? m.nom1 : m.nom2) : "", arbitres ? "Arbitres : " + arbitres : ""].filter(Boolean).map(esc).join(" · ");
+    m.forfait ? "Forfait de " + (m.forfait === 1 ? m.nom1 : m.nom2) : "", ed && arbitres ? "Arbitres : " + arbitres : ""].filter(Boolean).map(esc).join(" · ");
   const plus = !ed ? "" : `<button class="plus" data-action="plus" data-cle="${cle}" aria-expanded="${ouvert}">${ouvert ? "Fermer" : org ? "Arbitres, heure, forfait" : "Forfait"}</button>
     ${ouvert ? `<div class="grille options">
       <label>Forfait<select id="forfait|${cle}" data-s="forfait" data-cle="${cle}"><option value="">Pas de forfait</option>
@@ -157,7 +161,7 @@ function vueReglages() {
     return `<select ${attr}><option value="">— à choisir —</option>${v && !connu ? `<option value="${esc(v)}" selected>⚠ à choisir de nouveau</option>` : ""}${
       groupes.filter(([, o]) => o.length).map(([nom, o]) => `<optgroup label="${nom}">${o.map(([code, mots]) => `<option value="${esc(code)}"${code === v ? " selected" : ""}>${esc(mots)}</option>`).join("")}</optgroup>`).join("")}</select>`;
   };
-  const nbPlaces = Math.min(32, Math.max(c.lettres.reduce((s, l) => s + c.classement[l].lignes.length, 0), (r.places || []).filter(Boolean).length));
+  const poules3 = c.lettres.filter((l) => c.classement[l].lignes.length === 3);
   return `
   <section><h2>Tournoi</h2><div class="grille">
     <label>Nom<input id="t-nom" data-tournoi="nom" value="${esc(t.nom)}"></label>
@@ -171,6 +175,9 @@ function vueReglages() {
       [...TH.LETTRES].map((l) => `<option value="${l}"${e.poule === l ? " selected" : ""}>Poule ${l}</option>`).join("")}</select>
       <button data-action="oter-equipe" data-id="${e.id}" class="danger" aria-label="Supprimer ${esc(e.nom)}">${confirme("equipe:" + e.id, "Supprimer")}</button></div>`).join("")}</div>
     <p class="boutons"><button data-action="ajouter-equipe" class="principal">Ajouter une équipe</button></p>
+    ${poules3.length ? `<h3>Poules de 3 : premier match</h3><p class="note">Le perdant du premier match joue tout de suite le deuxième match contre la troisième équipe. Choisis les deux équipes du premier match.</p>
+    <div class="grille">${poules3.map((l) => { const p = c.classement[l].lignes.map((x) => x.equipe).sort((a, b) => a.ordre - b.ordre), repos = p.find((e) => e.id === r.repos3?.[l]) || p[2];
+      return `<label>Poule ${l}<select id="reg-repos3.${l}" data-reg="repos3.${l}">${p.map((e) => `<option value="${e.id}"${e === repos ? " selected" : ""}>${esc(p.filter((x) => x !== e).map((x) => x.nom).join(" – "))}</option>`).join("")}</select></label>`; }).join("")}</div>` : ""}
     <h3>Terrain de chaque poule</h3><p class="note">Exemple : « 1 » ou « 1 et 2 ». Vide = tous les terrains.</p>
     <div class="grille">${c.lettres.map((l) => `<label>Poule ${l} (${c.classement[l].lignes.length} équipes)${texte(`id="reg-terrainsPoule.${l}" data-reg="terrainsPoule.${l}"`, r.terrainsPoule?.[l])}</label>`).join("") || '<p class="note">Aucune poule.</p>'}</div></section>
 
@@ -194,24 +201,27 @@ function vueReglages() {
     <p class="boutons"><button data-action="ajouter-arbitre" class="principal">Ajouter un arbitre ou un binôme</button></p></section>
 
   <section><h2>5. Phases finales</h2><p class="note">Pour chaque match, choisis d'où viennent les deux équipes. Leur nom s'affichera tout seul dès que la poule ou le match précédent sera terminé.
-    Les matchs d'un même tour se jouent en même temps.</p>
-    ${(r.finales || []).map((f, i) => { const avant = c.finales.filter((x) => (r.finales || []).slice(0, i).some((y) => String(y.code).toUpperCase() === x.code)); return `<div class="grille rang">
+    L'ordre de passage décide de l'heure : deux matchs avec le même numéro se jouent en même temps sur deux terrains différents.</p>
+    ${(r.finales || []).map((f, i) => { const avant = c.finales.filter((x) => x.tour < (+f.tour || 1)); return `<div class="grille rang">
       <label>Nom du match${texte(`id="fin-${i}-intitule" data-fin="${i}.intitule"`, f.intitule)}</label>
       <label>Équipe 1${origine(`id="fin-${i}-e1" data-fin="${i}.e1"`, f.e1, avant, true)}</label>
       <label>Équipe 2${origine(`id="fin-${i}-e2" data-fin="${i}.e2"`, f.e2, avant, true)}</label>
-      <label>Tour${texte(`id="fin-${i}-tour" data-fin="${i}.tour" type="number" min="1"`, f.tour)}</label>
+      <label>Ordre de passage${texte(`id="fin-${i}-tour" data-fin="${i}.tour" type="number" min="1"`, f.tour)}</label>
       <label>Terrain<select id="fin-${i}-terrain" data-fin="${i}.terrain"><option value="">Automatique</option>${
         [...Array(c.nTer)].map((_, k) => `<option value="${k + 1}"${+f.terrain === k + 1 ? " selected" : ""}>Terrain ${k + 1}</option>`).join("")}</select></label>
       <div class="fin"><button data-action="oter-finale" data-i="${i}" class="danger" aria-label="Supprimer ${esc(f.intitule)}">Supprimer</button></div></div>`; }).join("")}
     <p class="boutons"><button data-action="ajouter-finale" class="principal">Ajouter un match</button></p>
-    <h3>Classement final</h3><p class="note">Pour chaque place, choisis l'équipe qui l'obtient.</p>
-    <div class="grille">${[...Array(nbPlaces)].map((_, i) => `<label>${i + 1}${i ? "e" : "re"} place${origine(`id="place-${i}" data-place="${i}"`, r.places?.[i], c.finales, false)}</label>`).join("")}</div></section>
+    <h3>Classement final</h3><p class="note">Une place par équipe engagée (${c.places.length}). Pour chaque place, choisis l'équipe qui l'obtient.</p>
+    <div class="grille">${c.places.map((_, i) => `<label>${i + 1}${i ? "e" : "re"} place${origine(`id="place-${i}" data-place="${i}"`, r.places?.[i], c.finales, false)}</label>`).join("")}</div></section>
 
-  <section><h2>6. Accès</h2><p class="note">Organisateur : peut tout modifier. Table de marque : écrit les scores et les forfaits. La personne clique sur « Connexion », puis « Créer mon compte » la première fois, avec cet e-mail.</p>
-    ${etat.acces.map((a) => `<div class="paire"><span class="large">${esc(a.email)} — ${a.role === "organisateur" ? "organisateur" : "table de marque"}</span>
-      ${a.email === etat.session.user.email.toLowerCase() ? '<span class="note">(toi)</span>' : `<button data-action="oter-acces" data-email="${esc(a.email)}" class="danger">Supprimer</button>`}</div>`).join("")}
-    <form data-form="acces" class="filtres"><label>E-mail<input name="email" type="email" required></label>
-      <label>Rôle<select name="role"><option value="table">Table de marque</option><option value="organisateur">Organisateur</option></select></label><button class="principal">Ajouter</button></form></section>`;
+  <section><h2>6. Comptes</h2><p class="note">Tu crées ici chaque compte avec son identifiant et sa fonction. Organisateur : peut tout modifier. Table de marque : écrit les scores et les forfaits.
+    La personne ouvre « Connexion », tape son identifiant et choisit elle-même son mot de passe avec « Première connexion ». Aucun e-mail n'est envoyé.</p>
+    ${etat.acces.map((a) => `<div class="paire"><span class="large"><b>${esc(identifiant(a.email))}</b> — ${a.role === "organisateur" ? "organisateur" : "table de marque"}
+      <br><span class="note">${a.active ? "mot de passe créé" : "en attente de première connexion"}</span></span>
+      ${a.email === etat.session.user.email.toLowerCase() ? '<span class="note">(toi)</span>' : `${a.active && a.email.endsWith(DOMAINE) ? `<button data-action="oublier-mdp" data-email="${esc(a.email)}">Mot de passe oublié</button>` : ""}
+        <button data-action="oter-acces" data-email="${esc(a.email)}" class="danger">Supprimer</button>`}</div>`).join("")}
+    <form data-form="acces" class="filtres"><label>Identifiant (exemple : table1)<input name="identifiant" required minlength="3" maxlength="60" autocapitalize="none" autocomplete="off"></label>
+      <label>Fonction<select name="role"><option value="table">Table de marque</option><option value="organisateur">Organisateur</option></select></label><button class="principal">Créer le compte</button></form></section>`;
 }
 
 // ------------------------------------------------------------------ page
@@ -226,10 +236,11 @@ function afficher() {
       ${etat.session ? `<button data-action="deconnexion">Déconnexion</button>` : `<button data-action="connexion">${etat.connexion ? "Fermer" : "Connexion"}</button>`}</div>
       ${etat.tournois.length ? `<label class="invisible" for="choix-tournoi">Tournoi</label><select id="choix-tournoi" data-choix="tournoi">${etat.tournois.map((x) =>
         `<option value="${x.id}"${x.id === etat.id ? " selected" : ""}>${esc(x.nom)}${x.date_tournoi ? " — " + x.date_tournoi.split("-").reverse().join("/") : ""}</option>`).join("")}</select>` : ""}
-      ${etat.session ? `<p class="qui">${esc(etat.session.user.email)}${etat.role ? ` · ${org ? "organisateur" : "table de marque"}` : ""}</p>` : ""}</header>
-    ${etat.connexion && !etat.session ? `<form data-form="connexion" class="filtres connexion"><label>E-mail<input name="email" type="email" autocomplete="username" required></label>
+      ${etat.session ? `<p class="qui">${esc(identifiant(etat.session.user.email))}${etat.role ? ` · ${org ? "organisateur" : "table de marque"}` : ""}</p>` : ""}</header>
+    ${etat.connexion && !etat.session ? `<form data-form="connexion" class="filtres connexion"><label>Identifiant<input name="identifiant" autocomplete="username" autocapitalize="none" required></label>
       <label>Mot de passe<input name="mdp" type="password" autocomplete="current-password" minlength="6" required></label>
-      <button name="mode" value="entrer" class="principal">Se connecter</button><button name="mode" value="creer">Créer mon compte</button></form>` : ""}
+      <button name="mode" value="entrer" class="principal">Se connecter</button><button name="mode" value="premiere">Première connexion : créer mon mot de passe</button>
+      <p class="note">Première connexion : tape l'identifiant donné par l'organisateur, choisis ton mot de passe (8 caractères au moins), puis appuie sur le second bouton.</p></form>` : ""}
     ${etat.message ? `<p class="message" role="status">${esc(etat.message)} <button data-action="fermer-message" aria-label="Fermer le message">Fermer</button></p>` : ""}
     <main>${t ? vues[etat.onglet]() : `<p class="note">Aucun tournoi pour l'instant.</p>${org ? '<p><button data-action="nouveau" class="principal">Créer le premier tournoi</button></p>' : ""}`}
       <p class="pied">Version ${VERSION} · la page se met à jour toute seule toutes les 15 secondes</p></main>
@@ -370,6 +381,10 @@ document.addEventListener("click", async (ev) => {
       r.finales.push({ code: "M" + n, intitule: "Nouveau match", tour: 1, e1: "", e2: "", terrain: null });
     });
     case "oter-finale": return sauverReglages((r) => r.finales.splice(+d.i, 1));
+    case "oublier-mdp": return ecrire(sb.from("th_acces").update({ active: false }).eq("email", d.email), () => {
+      etat.acces.find((a) => a.email === d.email).active = false;
+      etat.message = `${identifiant(d.email)} peut choisir un nouveau mot de passe avec « Première connexion ».`;
+    });
     case "oter-acces": return ecrire(sb.from("th_acces").delete().eq("email", d.email), () => (etat.acces = etat.acces.filter((a) => a.email !== d.email)));
   }
 });
@@ -377,13 +392,18 @@ document.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = new FormData(ev.target, ev.submitter);
   if (ev.target.dataset.form === "connexion") {
-    const identifiants = { email: f.get("email").trim(), password: f.get("mdp") };
-    const { error } = f.get("mode") === "creer" ? await sb.auth.signUp(identifiants) : await sb.auth.signInWithPassword(identifiants);
-    if (error) return dire("Connexion refusée", error);
-    if (f.get("mode") === "creer") dire("Compte créé. Si tu reçois un e-mail de confirmation, clique sur son lien, puis connecte-toi.");
+    const identifiants = { email: versEmail(f.get("identifiant")), password: f.get("mdp") };
+    if (f.get("mode") === "premiere") {
+      const { error } = await sb.functions.invoke("th-comptes", { body: { email: identifiants.email, mot_de_passe: identifiants.password } });
+      if (error) return dire(await error.context?.json?.().then((x) => x.erreur, () => null) || "Création du mot de passe impossible : vérifie la connexion internet.");
+    }
+    const { error } = await sb.auth.signInWithPassword(identifiants);
+    if (error) return dire("Connexion refusée : identifiant ou mot de passe incorrect.");
   } else if (ev.target.dataset.form === "acces") {
-    const ligne = { email: f.get("email").trim().toLowerCase(), role: f.get("role") };
-    ecrire(sb.from("th_acces").upsert(ligne), () => { etat.acces = [...etat.acces.filter((a) => a.email !== ligne.email), ligne]; });
+    const ligne = { email: versEmail(f.get("identifiant")), role: f.get("role") };
+    if (!/^[a-z0-9._-]{3,40}@[a-z0-9.-]+$/.test(ligne.email)) return dire("Identifiant refusé : 3 caractères au moins, seulement des lettres sans accent, des chiffres, des points ou des tirets.");
+    if (etat.acces.some((a) => a.email === ligne.email)) return dire("Cet identifiant existe déjà.");
+    ecrire(sb.from("th_acces").insert(ligne), () => { etat.acces = [...etat.acces, { ...ligne, active: false }]; });
   }
 });
 window.addEventListener("hashchange", charger);

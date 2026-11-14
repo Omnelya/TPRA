@@ -106,22 +106,38 @@ const TH = (() => {
     }
 
     // --- matchs de poule : tous contre tous (méthode du tourniquet), journée par journée
-    const matchs = [];
+    const matchs = [], premier = {};
     const nbTours = Math.max(0, ...lettres.map((l) => poules[l].length + (poules[l].length % 2) - 1));
     for (let tour = 0; tour < nbTours; tour++) {
       for (const l of lettres) {
         const p = poules[l], n = p.length, pair = n + (n % 2);
         for (let k = 0; k < pair / 2; k++) {
           if (n < 2 || tour > pair - 2 || (n % 2 === 1 && k === 0)) continue;
-          const i1 = k === 0 ? pair - 1 : (tour + k) % (pair - 1);
-          const i2 = k === 0 ? tour : (tour - k + pair - 1) % (pair - 1);
-          const m = { phase: "poule", num: matchs.length + 1, poule: l, tour: tour + 1, e1: p[i1], e2: p[i2] };
-          m.nom1 = m.e1.nom; m.nom2 = m.e2.nom;
-          m.cle = clePoule(m.e1.id, m.e2.id);
-          const mini = Math.max(dernierEquipe.get(m.e1.id) || 0, dernierEquipe.get(m.e2.id) || 0) + 1;
+          const m = { phase: "poule", num: matchs.length + 1, poule: l, tour: tour + 1 };
+          let joueurs;
+          if (n === 3) {
+            // poule de 3 : le perdant du 1er match rejoue aussitôt contre l'équipe qui était au repos
+            const repos = p.find((e) => e.id === r.repos3?.[l]) || p[2], [x, y] = p.filter((e) => e !== repos), m1 = premier[l];
+            joueurs = p;
+            if (tour === 0) { m.e1 = x; m.e2 = y; m.cle = clePoule(x.id, y.id); premier[l] = m; }
+            else {
+              // match nul au 1er match : c'est l'équipe citée en premier qui rejoue
+              const perdant = m1.joue ? m1.perdant || m1.e1 : null;
+              m.e1 = repos;
+              m.e2 = !perdant ? null : tour === 1 ? perdant : perdant === m1.e1 ? m1.e2 : m1.e1;
+              m.attente = (tour === 1 ? "Perdant" : "Vainqueur") + " du 1er match";
+              m.cle = `P3:${repos.id}:${tour + 1}`;
+            }
+          } else {
+            m.e1 = p[k === 0 ? pair - 1 : (tour + k) % (pair - 1)];
+            m.e2 = p[k === 0 ? tour : (tour - k + pair - 1) % (pair - 1)];
+            m.cle = clePoule(m.e1.id, m.e2.id);
+            joueurs = [m.e1, m.e2];
+          }
+          m.nom1 = m.e1.nom; m.nom2 = m.e2 ? m.e2.nom : m.attente;
+          const mini = Math.max(...joueurs.map((e) => dernierEquipe.get(e.id) || 0)) + 1;
           placer(m, listeTerrains(r.terrainsPoule?.[l], nTer), mini);
-          dernierEquipe.set(m.e1.id, m.creneau);
-          dernierEquipe.set(m.e2.id, m.creneau);
+          for (const e of joueurs) dernierEquipe.set(e.id, m.creneau);
           terminer(m);
           matchs.push(m);
         }
@@ -180,12 +196,13 @@ const TH = (() => {
       return cl.lignes.some((y) => y.doublon) ? { eq: null, nom: "⚠ départager poule " + m[2] } : inconnu;
     }
 
-    // --- phases finales, dans l'ordre de la liste ; un nouveau tour commence après tous les matchs déjà placés
+    // --- phases finales, par ordre de passage (« tour ») ; un même numéro = matchs en même temps sur des terrains différents
     const finales = [];
     let base = 0, tourAvant = null;
-    for (const d of r.finales || []) {
+    const prevues = (r.finales || []).map((d, i) => ({ d, i })).filter((x) => txt(x.d.code))
+      .sort((a, b) => nb(a.d.tour, 1) - nb(b.d.tour, 1) || a.i - b.i);
+    for (const { d } of prevues) {
       const code = txt(d.code).toUpperCase();
-      if (!code) continue;
       const m = { phase: "finale", code, intitule: txt(d.intitule), tour: nb(d.tour, 1), cle: "F:" + code };
       const a = resoudre(d.e1, finales), b = resoudre(d.e2, finales);
       m.e1 = a.eq; m.nom1 = a.nom; m.e2 = b.eq; m.nom2 = b.nom;
@@ -224,7 +241,8 @@ const TH = (() => {
       }
     }
 
-    const places = (r.places || []).map((code, i) => ({ place: i + 1, nom: resoudre(code, finales).nom })).filter((p) => p.nom);
+    // une place par équipe engagée
+    const places = actives.map((_, i) => ({ place: i + 1, nom: resoudre(r.places?.[i], finales).nom || "à définir" }));
     const arb = [...arbitres].sort((a, b) => a.ordre - b.ordre).map((a) => ({ ...a, designation: designation(a), nb: compte.get(a.id) || 0 }));
     return { matchs, finales, classement, lettres, places, arbitres: arb, nTer, dMatch, dCreneau };
   }

@@ -23,7 +23,7 @@ for (const [tailles, terrains, terrainsPoule] of [
   assert.strictEqual(new Set(c.matchs.map((m) => m.cle)).size, c.matchs.length, "match en double");
   const vus = new Set();
   for (const m of c.matchs) {
-    for (const k of [m.heure + "|" + m.e1.id, m.heure + "|" + m.e2.id, m.heure + "|T" + m.terrain]) { assert(!vus.has(k), "conflit " + k); vus.add(k); }
+    for (const k of [m.heure + "|" + m.e1.id, m.e2 && m.heure + "|" + m.e2.id, m.heure + "|T" + m.terrain]) { if (k) { assert(!vus.has(k), "conflit " + k); vus.add(k); } }
     const permis = TH.listeTerrains(terrainsPoule[m.poule], terrains);
     assert(m.terrain >= 1 && m.terrain <= terrains && (!permis.length || permis.includes(m.terrain)), "terrain de poule");
     assert.deepStrictEqual(m.alertes, []);
@@ -84,5 +84,33 @@ assert.strictEqual(c.matchs.find((m) => m.creneau === 3 && !m.heureSaisie).heure
 c = TH.calculer({ auto: false }, E, arbitres, []);
 assert(c.matchs.every((m) => m.heure === "" && m.terrain === null));
 assert.deepStrictEqual(["14:30", "14h30", "9.05", "14", "25:00", "abc"].map(TH.minutes), [870, 870, 545, 840, null, null]);
+
+// 5. Poule de 3 : le perdant du 1er match rejoue contre l'équipe au repos ; choix de l'équipe au repos
+const T = equipes([3]);
+c = TH.calculer({ finales: [] }, T, [], []);
+assert.deepStrictEqual(c.matchs.map((m) => [m.nom1, m.nom2, m.heure]), [["Equipe A", "Equipe B", "09:00"], ["Equipe C", "Perdant du 1er match", "09:27"], ["Equipe C", "Vainqueur du 1er match", "09:54"]]);
+assert(!c.matchs[1].joue && !c.classement.A.complete);
+const s3 = [{ cle: c.matchs[0].cle, score1: 12, score2: 9 }, { cle: c.matchs[1].cle, score1: 10, score2: 10 }, { cle: c.matchs[2].cle, score1: 5, score2: 8 }];
+c = TH.calculer({ finales: [] }, T, [], s3);
+assert.deepStrictEqual(c.matchs.map((m) => m.nom2), ["Equipe B", "Equipe B", "Equipe A"]);
+assert.deepStrictEqual(c.classement.A.lignes.map((x) => [x.equipe.nom, x.pts, x.j]), [["Equipe A", 6, 2], ["Equipe B", 3, 2], ["Equipe C", 3, 2]]);
+assert(c.classement.A.complete);
+c = TH.calculer({ finales: [] }, T, [], [{ cle: c.matchs[0].cle, score1: 7, score2: 7 }]); // nul : l'équipe citée en premier rejoue
+assert.deepStrictEqual(c.matchs.map((m) => m.nom2), ["Equipe B", "Equipe A", "Equipe B"]);
+c = TH.calculer({ finales: [], repos3: { A: "e0" } }, T, [], []);
+assert.deepStrictEqual(c.matchs.map((m) => [m.nom1, m.nom2]), [["Equipe B", "Equipe C"], ["Equipe A", "Perdant du 1er match"], ["Equipe A", "Vainqueur du 1er match"]]);
+
+// 6. Classement final : une place par équipe engagée
+assert.strictEqual(TH.calculer({}, equipes([5, 5]), [], []).places.length, 10);
+c = TH.calculer({}, equipes([3, 3]), [], []);
+assert.deepStrictEqual([c.places.length, c.places[0].nom], [6, "Vainqueur Finale"]);
+assert.strictEqual(TH.calculer({ places: [] }, equipes([2]), [], []).places[1].nom, "à définir");
+
+// 7. Phases finales : l'ordre de passage décide de l'heure, pas la position dans la liste
+const F = [{ code: "A1", intitule: "Demi 1", tour: 1, e1: "1A", e2: "2B", terrain: 1 }, { code: "A2", intitule: "Finale", tour: 2, e1: "V-A1", e2: "V-A3", terrain: 1 },
+  { code: "A3", intitule: "Demi 2", tour: 1, e1: "1B", e2: "2A", terrain: 2 }];
+c = TH.calculer({ finales: F }, E, [], []);
+assert.deepStrictEqual(c.finales.map((f) => [f.intitule, f.heure, f.terrain]), [["Demi 1", "11:42", 1], ["Demi 2", "11:42", 2], ["Finale", "12:09", 1]]);
+assert.strictEqual(c.finales[2].nom2, "Vainqueur Demi 2");
 
 console.log("Tous les tests passent.");
