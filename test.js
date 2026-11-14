@@ -16,7 +16,7 @@ const arbitres = [
 // 1. Calendrier complet et sans conflit, pour plusieurs configurations
 for (const [tailles, terrains, terrainsPoule] of [
   [[4, 4], 2, { A: "1", B: "2" }], [[5], 3, {}], [[5, 5, 6], 4, { A: "1", B: "2", C: "3 et 4" }], [[16], 10, {}],
-  [[2, 2, 2, 2, 2, 2, 2, 2], 2, {}], [[3, 3, 3, 3, 4], 1, {}], [[7, 9], 5, { A: "1;2", B: "3-5" }], [[4, 4, 4], 3, { A: "1", B: "1", C: "9" }],
+  [[2, 2, 2, 2, 2, 2, 2, 2], 2, {}], [[19, 3], 4, {}], [[3, 3, 3, 3, 4], 1, {}], [[7, 9], 5, { A: "1;2", B: "3-5" }], [[4, 4, 4], 3, { A: "1", B: "1", C: "9" }],
 ]) {
   const c = TH.calculer({ terrains, terrainsPoule, finales: [] }, equipes(tailles), [], []);
   assert.strictEqual(c.matchs.length, tailles.reduce((s, n) => s + (n * (n - 1)) / 2, 0), "nombre de matchs " + tailles);
@@ -34,8 +34,8 @@ for (const [tailles, terrains, terrainsPoule] of [
 const E = equipes([4, 4]);
 let c = TH.calculer({}, E, arbitres, []);
 assert.strictEqual(c.matchs[0].heure, "09:00");
-assert.strictEqual(c.finales[0].nom1, "1er poule A");
-assert.strictEqual(c.finales[7].nom2, "Vainq. DF2");
+assert.deepStrictEqual([c.finales[0].nom1, c.finales[0].nom2], ["Vainqueur Poule A", "2e Poule B"]);
+assert.strictEqual(c.finales[7].nom2, "Vainqueur Demi-finale 2");
 assert.strictEqual(c.finales[0].heure, "11:42"); // 6 créneaux de 27 min après 09:00
 let graine = 1;
 const alea = () => (graine = (graine * 16807) % 2147483647) % 21 + 10;
@@ -63,7 +63,7 @@ assert.deepStrictEqual(c.finales.slice(0, 2).map((f) => [f.nom1, f.nom2]), [["Eq
 assert.deepStrictEqual(c.places.slice(0, 4).map((p) => p.nom), ["Equipe A", "Equipe B", "Equipe E", "Equipe F"]);
 assert(c.finales[2].alertes[0].startsWith("Match nul"));
 assert(c.finales[4].alertes[0].startsWith("Équipes pas encore connues"));
-assert.strictEqual(c.places[4].nom, "Vainq. M5");
+assert.strictEqual(c.places[4].nom, "Vainqueur Match pour la 5e place");
 E.forEach((e) => delete e.departage);
 
 // 4. Alertes arbitres, terrain, équipe ; horaire manuel ; pause repas ; planning coupé

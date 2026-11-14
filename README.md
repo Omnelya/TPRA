@@ -21,3 +21,4 @@ Les données sont dans le projet Supabase « Suiviarbitres », dans les tables `
 ## Versions
 
 - **v2.0** — 14/11/2026 — première version web (reprend la logique du classeur Excel v1.1).
+- **v2.1** — 14/11/2026 — nouvelle interface (matchs rangés par heure, une couleur par terrain, menu en bas), ajout et suppression d'équipes sans limite de nombre, phases finales réglées avec des mots (« Vainqueur Poule A ») à la place des codes.

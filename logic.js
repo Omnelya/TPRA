@@ -42,6 +42,7 @@ const TH = (() => {
   }
   const hhmm = (m) => (m == null ? "" : String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"));
   const clePoule = (a, b) => "P:" + [a, b].sort().join(":");
+  const rangPoule = (rang, lettre) => (rang === 1 ? "Vainqueur" : rang + "e") + " Poule " + lettre;
   const designation = (a) => (a ? txt(a.nom1) + (txt(a.nom2) ? " / " + txt(a.nom2) : "") : "");
 
   function calculer(reglagesBruts, equipes, arbitres, saisies) {
@@ -106,7 +107,8 @@ const TH = (() => {
 
     // --- matchs de poule : tous contre tous (méthode du tourniquet), journée par journée
     const matchs = [];
-    for (let tour = 0; tour < 15; tour++) {
+    const nbTours = Math.max(0, ...lettres.map((l) => poules[l].length + (poules[l].length % 2) - 1));
+    for (let tour = 0; tour < nbTours; tour++) {
       for (const l of lettres) {
         const p = poules[l], n = p.length, pair = n + (n % 2);
         for (let k = 0; k < pair / 2; k++) {
@@ -158,21 +160,21 @@ const TH = (() => {
     // --- code (1A, V-DF1, P-DF1, nom d'équipe) → équipe, ou texte d'attente
     function resoudre(code, avant) {
       const c = txt(code).toUpperCase();
-      const inconnu = { eq: null, nom: `⚠ ${c} ?` };
+      const inconnu = { eq: null, nom: "⚠ à définir" };
       if (!c) return { eq: null, nom: "" };
       let m = c.match(/^([VP])-(.+)$/);
       if (m) {
         const f = avant.find((x) => x.code === m[2]);
         if (!f) return inconnu;
         const e = m[1] === "V" ? f.vainqueur : f.perdant;
-        return e ? { eq: e, nom: e.nom } : { eq: null, nom: (m[1] === "V" ? "Vainq. " : "Perd. ") + m[2] };
+        return e ? { eq: e, nom: e.nom } : { eq: null, nom: (m[1] === "V" ? "Vainqueur " : "Perdant ") + (f.intitule || "match") };
       }
       const parNom = actives.find((e) => txt(e.nom).toUpperCase() === c);
       if (parNom) return { eq: parNom, nom: parNom.nom };
       m = c.match(/^(\d+)([A-H])$/);
       if (!m || !classement[m[2]]) return inconnu;
       const cl = classement[m[2]], rang = +m[1];
-      if (!cl.complete) return { eq: null, nom: (rang === 1 ? "1er " : rang + "e ") + "poule " + m[2] };
+      if (!cl.complete) return { eq: null, nom: rangPoule(rang, m[2]) };
       const x = cl.lignes.filter((y) => y.rang === rang);
       if (x.length === 1) return { eq: x[0].equipe, nom: x[0].equipe.nom };
       return cl.lignes.some((y) => y.doublon) ? { eq: null, nom: "⚠ départager poule " + m[2] } : inconnu;
@@ -227,7 +229,7 @@ const TH = (() => {
     return { matchs, finales, classement, lettres, places, arbitres: arb, nTer, dMatch, dCreneau };
   }
 
-  return { LETTRES, NTM, DEFAUT, reglages, calculer, listeTerrains, minutes, hhmm, designation };
+  return { LETTRES, NTM, DEFAUT, reglages, calculer, listeTerrains, minutes, hhmm, designation, rangPoule };
 })();
 
 if (typeof module !== "undefined") module.exports = TH;
