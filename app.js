@@ -78,7 +78,7 @@ function carteMatch(m) {
   else centre = `<span class="mot">${m.e1 && m.e2 ? "à jouer" : "contre"}</span>`;
   const classe = (e, autre) => "eq" + (m.joue && m.vainqueur === e && e ? " gagne" : m.joue && m.vainqueur === autre && autre ? " perd" : "");
   const arbitres = [TH.designation(m.arbitre), TH.designation(m.renfort)].filter(Boolean).join(" + ");
-  const detail = [etat.groupe !== "heure" || m.phase === "finale" ? m.heure : "", m.phase === "poule" ? "Poule " + m.poule : m.intitule,
+  const detail = [etat.groupe !== "heure" && m.phase === "poule" ? m.heure : "", m.phase === "poule" ? "Poule " + m.poule : m.intitule,
     m.forfait ? "Forfait de " + (m.forfait === 1 ? m.nom1 : m.nom2) : "", arbitres ? "Arbitres : " + arbitres : ""].filter(Boolean).map(esc).join(" · ");
   const plus = !ed ? "" : `<button class="plus" data-action="plus" data-cle="${cle}" aria-expanded="${ouvert}">${ouvert ? "Fermer" : org ? "Arbitres, heure, forfait" : "Forfait"}</button>
     ${ouvert ? `<div class="grille options">
@@ -128,7 +128,7 @@ function vueClassement() {
   return c.lettres.map((l) => `<section class="groupe"><h2>Poule ${l}${c.classement[l].complete ? " — terminée" : ""}</h2>
     <div class="defile"><table><thead><tr><th>Rang</th><th>Équipe</th><th>Points</th><th title="Matchs joués">J</th><th title="Gagnés">G</th><th title="Nuls">N</th><th title="Perdus">P</th><th title="Forfaits">F</th>
       <th title="Buts marqués">Buts +</th><th title="Buts encaissés">Buts −</th><th>Écart</th>${org ? "<th>Départage</th>" : ""}</tr></thead><tbody>${
-    c.classement[l].lignes.map((x) => `<tr><td>${x.rang}</td><td><b>${esc(x.equipe.nom)}</b>${x.remarque ? `<br><span class="alerte">${x.remarque}</span>` : ""}</td><td><b>${x.pts}</b></td>
+    c.classement[l].lignes.map((x) => `<tr><td>${x.rang}</td><td><b>${esc(x.equipe.nom)}</b>${x.remarque.startsWith("⚠") ? `<br><span class="alerte">${x.remarque}</span>` : ""}</td><td><b>${x.pts}</b></td>
       <td>${x.j}</td><td>${x.g}</td><td>${x.n}</td><td>${x.p}</td><td>${x.f}</td><td>${x.bp}</td><td>${x.bc}</td><td>${x.diff > 0 ? "+" : ""}${x.diff}</td>${org ? `<td>${x.exAequo || x.equipe.departage != null
         ? `<input class="score" type="number" min="1" id="dep|${x.equipe.id}" data-dep="${x.equipe.id}" value="${x.equipe.departage ?? ""}" aria-label="Ordre de départage de ${esc(x.equipe.nom)}">` : ""}</td>` : ""}</tr>`).join("")
     }</tbody></table></div></section>`).join("") + (org ? `<p class="note">Départage : en cas d'égalité de points, applique le règlement puis écris l'ordre (1 = devant) dans la dernière colonne.</p>` : "");
