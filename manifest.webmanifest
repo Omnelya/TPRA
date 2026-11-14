@@ -1,0 +1,12 @@
+{
+  "name": "Tournoi de handball",
+  "short_name": "Tournoi",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FFFDF8",
+  "theme_color": "#2B2D42",
+  "icons": [
+    { "src": "icone-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icone-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

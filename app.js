@@ -1,5 +1,5 @@
 // Tournoi de handball — application web. Affichage public sans identifiant, saisie après connexion.
-const VERSION = "2.2";
+const VERSION = "2.3";
 const SUPABASE_URL = "https://izzwdgtwzmtlhiqkgewv.supabase.co";
 const SUPABASE_CLE = "sb_publishable_Y7E0XgCzbJK9wSB2guIt3g_x8AdV8aN"; // clé publique : les droits sont contrôlés par la base
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_CLE);
@@ -214,7 +214,7 @@ function vueReglages() {
     <h3>Classement final</h3><p class="note">Une place par équipe engagée (${c.places.length}). Pour chaque place, choisis l'équipe qui l'obtient.</p>
     <div class="grille">${c.places.map((_, i) => `<label>${i + 1}${i ? "e" : "re"} place${origine(`id="place-${i}" data-place="${i}"`, r.places?.[i], c.finales, false)}</label>`).join("")}</div></section>
 
-  <section><h2>6. Comptes</h2><p class="note">Tu crées ici chaque compte avec son identifiant et sa fonction. Organisateur : peut tout modifier. Table de marque : écrit les scores et les forfaits.
+  <section><h2>6. Comptes</h2><p class="note">Tu crées ici chaque compte avec son identifiant (sans « @ ») et sa fonction. Ces comptes ne donnent aucun accès au suivi des arbitres. Organisateur : peut tout modifier. Table de marque : écrit les scores et les forfaits.
     La personne ouvre « Connexion », tape son identifiant et choisit elle-même son mot de passe avec « Première connexion ». Aucun e-mail n'est envoyé.</p>
     ${etat.acces.map((a) => `<div class="paire"><span class="large"><b>${esc(identifiant(a.email))}</b> — ${a.role === "organisateur" ? "organisateur" : "table de marque"}
       <br><span class="note">${a.active ? "mot de passe créé" : "en attente de première connexion"}</span></span>
@@ -401,7 +401,8 @@ document.addEventListener("submit", async (ev) => {
     if (error) return dire("Connexion refusée : identifiant ou mot de passe incorrect.");
   } else if (ev.target.dataset.form === "acces") {
     const ligne = { email: versEmail(f.get("identifiant")), role: f.get("role") };
-    if (!/^[a-z0-9._-]{3,40}@[a-z0-9.-]+$/.test(ligne.email)) return dire("Identifiant refusé : 3 caractères au moins, seulement des lettres sans accent, des chiffres, des points ou des tirets.");
+    // pas d'adresse e-mail ici : un identifiant du tournoi reste séparé du suivi des arbitres
+    if (!/^[a-z0-9._-]{3,40}@tpra\.local$/.test(ligne.email)) return dire("Identifiant refusé : 3 caractères au moins, sans « @ », seulement des lettres sans accent, des chiffres, des points ou des tirets.");
     if (etat.acces.some((a) => a.email === ligne.email)) return dire("Cet identifiant existe déjà.");
     ecrire(sb.from("th_acces").insert(ligne), () => { etat.acces = [...etat.acces, { ...ligne, active: false }]; });
   }
